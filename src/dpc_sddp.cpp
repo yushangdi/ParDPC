@@ -30,8 +30,12 @@ compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K) {
   using point = pargeo::point<dim>;
   using ball = pargeo::_ball<dim, point>;
   using pointF = pargeo::pointD<dim, double>;
+  int leaf_size = 16;
+  if (dim > 100){
+    leaf_size = 100;
+  }
   pargeo::origKdTree::node<dim, point> *tree =
-      pargeo::origKdTree::build<dim, point>(ptrs, true, 100);
+      pargeo::origKdTree::build<dim, point>(ptrs, true, leaf_size);
 
   parlay::sequence<pointF> ptrDs(ptrs.size());
   auto knns = pargeo::origKdTree::batchKnn(ptrs, K, tree);
@@ -75,8 +79,12 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
   });
   parlay::stable_sort_inplace(ptrDs, pointF::attCompRev);
 
+  int leaf_size = 16;
+  if (dim > 100){
+    leaf_size = 100;
+  }
   pargeo::psKdTree::tree<dim, pointF> *root =
-      pargeo::psKdTree::build<dim, pointF>(ptrDs, true, 16);
+      pargeo::psKdTree::build<dim, pointF>(ptrDs, true, leaf_size);
   root->pargeo::psKdTree::node<dim, pointF>::initParallel();
   parlay::parallel_for(
       0, n,
@@ -89,7 +97,7 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
       },
       1);
   output_metadata["Compute dependent points time"] = depT.get_next();
-  std::cout << "dependent: " << std::endl;
+  std::cout << "dependent: " << output_metadata["Compute dependent points time"] << std::endl;
 
   linkageT.start();
   pargeo::unionFind<int> UF(n);
@@ -105,7 +113,7 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
   std::vector<int> cluster(n);
   parlay::parallel_for(0, n, [&](int i) { cluster[i] = UF.find(i); });
   output_metadata["Find clusters time"] = linkageT.get_next();
-  std::cout << "link:" << std::endl;
+  std::cout << "link:" << output_metadata["Find clusters time"] << std::endl;
 
   output_metadata["Total time"] = totalT.get_next();
   std::cout << "Total time: " << output_metadata["Total time"] << std::endl;
