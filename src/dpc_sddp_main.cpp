@@ -29,6 +29,10 @@ int main(int argc, char *argv[]) {
     DPC::dpc_sddp<2>(data, oFile, dFile, n, K, noiseCut, depCut);
   } else if (dim == 128) {
     DPC::dpc_sddp<128>(data, oFile, dFile, n, K, noiseCut, depCut);
+  } else if (dim == 784) {
+    DPC::dpc_sddp<784>(data, oFile, dFile, n, K, noiseCut, depCut);
+  } else if (dim == 1024) {
+    DPC::dpc_sddp<1024>(data, oFile, dFile, n, K, noiseCut, depCut);
   } else {
     std::cout << "Unsupported dimension, dim = "<< dim << "\n";
     exit(1);

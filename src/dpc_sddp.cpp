@@ -31,14 +31,13 @@ compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K) {
   using ball = pargeo::_ball<dim, point>;
   using pointF = pargeo::pointD<dim, double>;
   pargeo::origKdTree::node<dim, point> *tree =
-      pargeo::origKdTree::build<dim, point>(ptrs, true, 1);
+      pargeo::origKdTree::build<dim, point>(ptrs, true, 100);
 
   parlay::sequence<pointF> ptrDs(ptrs.size());
-
   auto knns = pargeo::origKdTree::batchKnn(ptrs, K, tree);
 
   parlay::parallel_for(0, ptrs.size(), [&](size_t i) {
-    float dist = ptrs[knns[i * K + K - 1]].dist(ptrs[i]);
+    double dist = ptrs[knns[i * K + K - 1]].dist(ptrs[i]);
     ptrDs[i] = pointF(ptrs[i].coords(), 1.0 / dist);
   });
 
@@ -63,8 +62,8 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
   parlay::sequence<point> ptrs = parlay::tabulate(
       n, [&](size_t i) -> point { return point(data + dim * i); });
   parlay::sequence<pointF> ptrDs = compute_densities<dim>(ptrs, K);
-  // std::cout << "density: " << densityT.get_next() << std::endl;
   output_metadata["Compute density time"] = densityT.get_next();
+  std::cout << "density: " << output_metadata["Compute density time"] << std::endl;
 
   depT.start();
   parlay::sequence<int> depPtr(n);
@@ -90,8 +89,7 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
       },
       1);
   output_metadata["Compute dependent points time"] = depT.get_next();
-
-  // std::cout << "dependent: " << depT.get_next() << std::endl;
+  std::cout << "dependent: " << std::endl;
 
   linkageT.start();
   pargeo::unionFind<int> UF(n);
@@ -107,10 +105,12 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
   std::vector<int> cluster(n);
   parlay::parallel_for(0, n, [&](int i) { cluster[i] = UF.find(i); });
   output_metadata["Find clusters time"] = linkageT.get_next();
-  // std::cout << "link:" << linkageT.get_next() << std::endl;
+  std::cout << "link:" << std::endl;
 
   output_metadata["Total time"] = totalT.get_next();
-  // std::cout << "total:" << totalT.get_next() << std::endl;
+  std::cout << "Total time: " << output_metadata["Total time"] << std::endl;
+
+  std::cout << "writing result..." << std::endl;
 
   if (dFile.size() > 0) {
     std::ofstream fout(dFile);
@@ -136,5 +136,11 @@ template DPC::ClusteringResult DPC::dpc_sddp<2>(double *, std::string,
                                                 std::string, std::size_t,
                                                 double, double, double);
 template DPC::ClusteringResult DPC::dpc_sddp<128>(double *, std::string,
+                                                  std::string, std::size_t,
+                                                  double, double, double);
+template DPC::ClusteringResult DPC::dpc_sddp<784>(double *, std::string,
+                                                  std::string, std::size_t,
+                                                  double, double, double);
+template DPC::ClusteringResult DPC::dpc_sddp<1024>(double *, std::string,
                                                   std::string, std::size_t,
                                                   double, double, double);

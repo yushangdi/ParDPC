@@ -220,9 +220,12 @@ namespace pargeo::origKdTree
     auto out = parlay::sequence<knnBuf::elem<objT *>>(2 * k * queries.size());
     auto idx = parlay::sequence<size_t>(k * queries.size());
     parlay::parallel_for(0, queries.size(), [&](size_t i)
+    // for (size_t i = 0; i < queries.size(); ++i) 
                          {
                            knnBuf::buffer buf = knnBuf::buffer<objT *>(k, out.cut(i * 2 * k, (i + 1) * 2 * k));
+    // std::cout << i << " buf created " << std::endl;
                            knnHelper<dim, nodeT, objT>(tree, queries[i], buf);
+    // std::cout << i << " helper finished " << std::endl;
                            buf.keepK();
                            if (sorted)
                              buf.sort();

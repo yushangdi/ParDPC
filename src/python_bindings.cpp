@@ -22,6 +22,10 @@ DPC::ClusteringResult dpc_sddp_helper(double *data, std::string oFile,
     return DPC::dpc_sddp<2>(data, oFile, dFile, n, K, noiseCut, depCut);
   } else if (dim == 128) {
     return DPC::dpc_sddp<128>(data, oFile, dFile, n, K, noiseCut, depCut);
+  }  else if (dim == 784) {
+    return DPC::dpc_sddp<784>(data, oFile, dFile, n, K, noiseCut, depCut);
+  }  else if (dim == 1024) {
+    return DPC::dpc_sddp<1024>(data, oFile, dFile, n, K, noiseCut, depCut);
   } else {
     std::cout << "Unsupported dimension, dim = "<< dim << "\n";
     exit(1);
