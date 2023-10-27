@@ -14,7 +14,7 @@ if (USE_WARNINGS)
 endif()
 
 if(DEBUG)
-  add_definitions(-DDEBUG_MODE)
+  add_compile_definitions(-DDEBUG_MODE)
   set(CMAKE_BUILD_TYPE Debug)
   set(CMAKE_CXX_FLAGS "-DPARLAY_SEQUENTIAL -mcx16 -g -fPIC ${EXTRA_FLAGS}")
 else()

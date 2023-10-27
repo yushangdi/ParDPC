@@ -24,6 +24,14 @@ namespace DPC {
 
 namespace {
 
+template<class Node>
+int tree_depth(Node *tree){
+  if (tree->isLeaf()) return 1;
+  int left_depth = tree_depth(tree->L());
+  int right_depth = tree_depth(tree->R());
+  return 1 + std::max(left_depth, right_depth);
+}
+
 template <int dim>
 parlay::sequence<pargeo::pointD<dim, double>>
 compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K) {
@@ -36,6 +44,8 @@ compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K) {
   }
   pargeo::origKdTree::node<dim, point> *tree =
       pargeo::origKdTree::build<dim, point>(ptrs, true, leaf_size);
+  
+  std::cout << "tree built\n";
 
   parlay::sequence<pointF> ptrDs(ptrs.size());
   auto knns = pargeo::origKdTree::batchKnn(ptrs, K, tree);
