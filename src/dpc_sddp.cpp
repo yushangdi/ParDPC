@@ -4,6 +4,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -42,10 +43,13 @@ compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K) {
   if (dim > 100){
     leaf_size = 100;
   }
+  std::cout << "knn tree building, leaf size = " << leaf_size << std::endl;
+
   pargeo::origKdTree::node<dim, point> *tree =
       pargeo::origKdTree::build<dim, point>(ptrs, true, leaf_size);
   
-  std::cout << "tree built\n";
+  std::cout << "knn tree built, leaf size = " << leaf_size << std::endl;
+  std::cout << "tree depth " << tree_depth(tree) << std::endl;
 
   parlay::sequence<pointF> ptrDs(ptrs.size());
   auto knns = pargeo::origKdTree::batchKnn(ptrs, K, tree);
@@ -55,7 +59,45 @@ compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K) {
     ptrDs[i] = pointF(ptrs[i].coords(), 1.0 / dist);
   });
 
+  // // Open a file for writing
+  // std::ofstream outFile("densities.txt");
+  // if (!outFile) {
+  //     std::cerr << "Error opening file for writing!" << std::endl;
+  //     exit(1);
+  // }
+
+  // // Write the values to the file
+  // for (size_t i=0; i<ptrs.size();++i){
+  //     outFile << ptrDs[i].attribute << "\n";
+  // }
+
+  // // Close the file
+  // outFile.close();
   return ptrDs;
+}
+
+template <int dim>
+parlay::sequence<pargeo::pointD<dim, double>> read_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K){
+  using pointF = pargeo::pointD<dim, double>;
+  parlay::sequence<pointF> ptrDs(ptrs.size());
+  std::ifstream inFile("/afs/csail.mit.edu/u/s/shangdiy/DPC-ANN/ParDPC/build/densities.txt");
+    if (!inFile) {
+        std::cerr << "Error opening file for reading!" << std::endl;
+        exit(1);
+    }
+
+    // Read values from the file
+    double value;
+    int i = 0;
+    while (inFile >> value) {
+      ptrDs[i] = pointF(ptrs[i].coords(), value);
+      i++;
+    }
+
+    // Close the file
+    inFile.close();
+
+    return ptrDs;
 }
 } // namespace
 
@@ -75,6 +117,16 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
   totalT.start();
   parlay::sequence<point> ptrs = parlay::tabulate(
       n, [&](size_t i) -> point { return point(data + dim * i); });
+  // add random noise
+  std::default_random_engine generator;
+  std::uniform_real_distribution<double> distribution(0.0, 0.00001);
+  parlay::parallel_for(0, n, [&](std::size_t i){
+    for (int d = 0; d < dim ; ++ d){
+      if(ptrs[i][d] == 0){
+        ptrs[i][d] +=  distribution(generator);
+      }
+    }
+  });
   parlay::sequence<pointF> ptrDs = compute_densities<dim>(ptrs, K);
   output_metadata["Compute density time"] = densityT.get_next();
   std::cout << "density: " << output_metadata["Compute density time"] << std::endl;
@@ -95,10 +147,14 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
   }
   pargeo::psKdTree::tree<dim, pointF> *root =
       pargeo::psKdTree::build<dim, pointF>(ptrDs, true, leaf_size);
+  std::cout << "psKd-tree built, leaf size = " << leaf_size << std::endl;
+  std::cout << "tree depth " << tree_depth(root) << std::endl;
   root->pargeo::psKdTree::node<dim, pointF>::initParallel();
   parlay::parallel_for(
       0, n,
       [&](size_t i) {
+        if (i!= 56737) return;
+        std::cout << "i " << i << std::endl;
         pointF *ptr = root->NearestNeighborBounded(i);
         if (ptr)
           depPtr[inverseMap[i]] = inverseMap[ptr->attribute];

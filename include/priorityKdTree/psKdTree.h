@@ -26,7 +26,7 @@
 #include "pargeo/point.h"
 #include <tuple>
 
-namespace pargeo::origKdTree
+namespace pargeo::psKdTree
 {
 
 
@@ -35,81 +35,6 @@ namespace pargeo::origKdTree
 
   template <int _dim, class _objT>
   class node;
-
-  /* Kd-tree construction and destruction */
-
-  template <int dim, class objT>
-  node<dim, objT> *build(parlay::slice<objT *, objT *> P,
-                         bool parallel = true,
-                         size_t leafSize = 16);
-
-  template <int dim, class objT>
-  node<dim, objT> *build(parlay::sequence<objT> &P,
-                         bool parallel = true,
-                         size_t leafSize = 16);
-
-  template <int dim, class objT>
-  void del(node<dim, objT> *tree);
-
-  /* Kd-tree knn search */
-
-  template <int dim, class objT>
-  parlay::sequence<size_t> batchKnn(parlay::sequence<objT> &queries,
-                                    size_t k,
-                                    node<dim, objT> *tree = nullptr,
-                                    bool sorted = false);
-
-  /* Kd-tree range search */
-
-  template <int dim, typename objT>
-  parlay::sequence<objT *> rangeSearch(
-      node<dim, objT> *tree,
-      objT query,
-      double radius);
-
-  template <int dim, typename objT, typename F>
-  void rangeTraverse(
-      node<dim, objT> *tree,
-      objT query,
-      double radius,
-      F func);
-
-  template <int dim, typename objT>
-  parlay::sequence<objT *> orthogonalRangeSearch(
-      node<dim, objT> *tree,
-      objT query,
-      double halfLen);
-
-  template <int dim, typename objT, typename F>
-  void orthogonalRangeTraverse(
-      node<dim, objT> *tree,
-      objT query,
-      double halfLen,
-      F func);
-
-  /* Bichromatic closest pair */
-
-  template <typename nodeT>
-  std::tuple<typename nodeT::objT *,
-             typename nodeT::objT *,
-             typename nodeT::objT::floatT>
-  bichromaticClosestPair(nodeT *n1, nodeT *n2);
-
-  /* Well-separated pair decomposition */
-
-  template <typename nodeT>
-  struct wsp
-  {
-    nodeT *u;
-    nodeT *v;
-    wsp(nodeT *uu, nodeT *vv) : u(uu), v(vv) {}
-  };
-
-  template <int dim>
-  parlay::sequence<wsp<node<dim, point<dim>>>>
-  wellSeparatedPairDecomp(node<dim, point<dim>> *tree, double s = 2);
-
-
 
   /********* Implementations *********/
 
@@ -121,6 +46,8 @@ namespace pargeo::origKdTree
     using baseT = node<_dim, _objT>;
 
     parlay::sequence<_objT *> *allItems;
+    parlay::sequence<int> *id2loc;
+    parlay::sequence<baseT *> *allItemLeaf;
     node<_dim, _objT> *space;
 
   public:
@@ -136,16 +63,25 @@ namespace pargeo::origKdTree
 
       // allocate space for a copy of the items
       allItems = new parlay::sequence<_objT *>(_items.size());
+      allItemLeaf = new parlay::sequence<nodeT *>(_items.size(),NULL);
+      id2loc = new parlay::sequence<int>(_items.size());
 
-      for (size_t i = 0; i < _items.size(); ++i)
+
+      for (size_t i = 0; i < _items.size(); ++i){
         allItems->at(i) = &_items[i];
+        allItems->at(i)->attribute = i;
+      }
 
       // construct self
 
       baseT::items = allItems->cut(0, allItems->size());
+      baseT::itemLeaf = allItemLeaf->cut(0, allItemLeaf->size());
 
       baseT::resetId();
       baseT::constructSerial(space, leafSize);
+
+      for (size_t i=0; i < _items.size(); ++i)
+        id2loc->at(allItems->at(i)->attribute) = i;
     }
 
     tree(parlay::slice<_objT *, _objT *> _items,
@@ -161,27 +97,74 @@ namespace pargeo::origKdTree
 
       // allocate space for a copy of the items
       allItems = new parlay::sequence<_objT *>(_items.size());
+      allItemLeaf = new parlay::sequence<nodeT *>(_items.size());
+      id2loc = new parlay::sequence<int>(_items.size());
 
       parlay::parallel_for(0, _items.size(), [&](size_t i)
-                           { allItems->at(i) = &_items[i]; });
+      { 
+        allItems->at(i) = &_items[i]; 
+        allItems->at(i)->attribute = i;
+      });
 
       // construct self
 
       baseT::items = allItems->cut(0, allItems->size());
+      baseT::itemLeaf = allItemLeaf->cut(0, allItemLeaf->size());
 
       baseT::resetId();
       if (baseT::size() > 2000)
         baseT::constructParallel(space, flags, leafSize);
       else
         baseT::constructSerial(space, leafSize);
+
+      parlay::parallel_for(0, _items.size(), [&](size_t i){
+        id2loc->at(allItems->at(i)->attribute) = i;
+      });
     }
 
     ~tree()
     {
       free(space);
       delete allItems;
+      delete allItemLeaf;
+      delete id2loc;
     }
+
+
+    _objT* NearestNeighborBounded(size_t id);
+
+    void print_data(){
+      for(size_t i=0;i<allItems->size();i++){
+        std::cout<<allItems->at(i)->attribute<<" ";
+      }
+      std::cout<<std::endl;
+
+      for(size_t i=0;i<allItemLeaf->size();i++){
+        std::cout<<allItemLeaf->at(i)<<" ";
+      }
+      std::cout<<std::endl;
+    }
+
   };
+
+
+
+  /* Kd-tree construction and destruction */
+
+  template <int dim, class objT>
+  tree<dim, objT> *build(parlay::slice<objT *, objT *> P,
+                         bool parallel = true,
+                         size_t leafSize = 16);
+
+  template <int dim, class objT>
+  tree<dim, objT> *build(parlay::sequence<objT> &P,
+                         bool parallel = true,
+                         size_t leafSize = 16);
+
+  template <int dim, class objT>
+  void del(node<dim, objT> *tree);
+
+
 
   template <int _dim, class _objT>
   class node
@@ -208,7 +191,11 @@ namespace pargeo::origKdTree
 
     nodeT *sib;
 
+    nodeT *par;
+
     parlay::slice<_objT **, _objT **> items = parlay::slice<_objT **, _objT **>(nullptr, nullptr);
+
+	parlay::slice<nodeT **, nodeT **> itemLeaf = parlay::slice<nodeT **, nodeT **>(nullptr, nullptr);
 
     inline void minCoords(pointT &_pMin, pointT &p)
     {
@@ -265,8 +252,12 @@ namespace pargeo::origKdTree
 
     inline nodeT *R() { return right; }
 
+    inline nodeT *parent() { return par; }
+
     inline nodeT *siblin() { return sib; }
-    
+
+	  inline bool empty() { return size()==0; }
+
     inline intT size() { 
       if (items.begin() == nullptr) return 0;
       return items.size(); 
@@ -287,6 +278,10 @@ namespace pargeo::origKdTree
     inline floatT getMax(int i) { return pMax[i]; }
 
     inline floatT getMin(int i) { return pMin[i]; }
+
+    void initSerial();
+
+    void initParallel();
 
     // inline void setEmpty() { id = -2; }
 
@@ -343,6 +338,47 @@ namespace pargeo::origKdTree
       return myMax;
     }
 
+	inline double distSqrClosestToCenter(pointT center, pointT pMin, pointT pMax) {
+	  double dist = 0;
+      for (int d = 0; d < dim; ++ d) {
+		  double delta = std::max(pMin[d], std::min(center[d], pMax[d])) - center[d];
+		  dist += delta*delta;
+      }
+      return dist;
+    }
+
+	inline pointT pointClosestToCenter(pointT center, pointT pMin, pointT pMax) {
+      pointT p;
+      for (int d = 0; d < dim; ++ d) {
+		  p[d] = std::max(pMin[d], std::min(center[d], pMax[d]));
+      }
+      return p;
+    }
+
+    inline pointT pointFarthestFromCenter(pointT center, pointT pMin, pointT pMax){
+		pointT p;
+		for (int d = 0; d < dim; ++ d){
+			p[d] = (center[d]*2 < pMin[d]+pMax[d]) ? pMax[d] : pMin[d]; 
+		}
+		return p;
+	}
+
+    inline int boxBallCompare(pointT center, double r, pointT pMin, pointT pMax) {
+      pointT pc = pointClosestToCenter(center, pMin, pMax);
+      double pcToCenter = pc.distSqr(center); //squared distance
+      if(pcToCenter <= r*r) {
+		  pointT pf = pointFarthestFromCenter(center, pMin, pMax);
+		  double pfToCenter = pf.distSqr(center);
+		  if(pfToCenter <= r*r){
+			  return boxInclude;
+		  }else{
+			  return  boxOverlap;
+		  }
+	  }else{
+		  return boxExclude;
+	  }
+    }
+
     inline int boxCompare(pointT pMin1, pointT pMax1, pointT pMin2, pointT pMax2)
     {
       bool exclude = false;
@@ -364,13 +400,15 @@ namespace pargeo::origKdTree
 
     node();
 
-    node(parlay::slice<_objT **, _objT **> itemss,
+    node(parlay::slice<_objT **, _objT **> items_,
+         parlay::slice<nodeT **, nodeT **> itemLeaf_,
          intT nn,
          nodeT *space,
          parlay::slice<bool *, bool *> flags,
          intT leafSize = 16);
 
-    node(parlay::slice<_objT **, _objT **> itemss,
+    node(parlay::slice<_objT **, _objT **> items_,
+         parlay::slice<nodeT **, nodeT **> itemLeaf_,
          intT nn,
          nodeT *space,
          intT leafSize = 16);
@@ -382,6 +420,5 @@ namespace pargeo::origKdTree
 
 } // End namespace pargeo::kdTree
 
-#include "treeImpl.h"
-#include "knnImpl.h"
-#include "rangeSearchImpl.h"
+#include "psTreeImpl.h"
+#include "psKnnImpl.h"

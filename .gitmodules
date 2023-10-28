@@ -3,4 +3,4 @@
 	url = https://github.com/michaelyhuang23/ParGeo.git
 [submodule "external/parlaylib"]
 	path = external/parlaylib
-	url = https://github.com/michaelyhuang23/parlaylib.git
+	url = https://github.com/cmuparlay/parlaylib.git

@@ -1,3 +1,5 @@
 /build*
 /cmake-build-debug
 /dataset/*
+data/*
+mnist.py

@@ -24,9 +24,9 @@
 
 #include "parlay/parallel.h"
 #include "parlay/utilities.h"
-#include "kdTree.h"
+#include "psKdTree.h"
 
-namespace pargeo::origKdTree
+namespace pargeo::psKdTree
 {
 
   namespace kdTreeInternal
@@ -129,7 +129,7 @@ namespace pargeo::origKdTree
     {
       throw std::runtime_error("Error, kdTree splitting singleton.");
     }
-    intT lPt = 0;
+    intT lPt = 1; // changed from 0 to 1 to store the heap element
     intT rPt = size() - 1;
     while (lPt < rPt)
     {
@@ -142,6 +142,7 @@ namespace pargeo::origKdTree
         if (lPt < rPt)
         {
           std::swap(items[lPt], items[rPt]);
+          // std::swap(itemLeaf[lPt], itemLeaf[rPt]);
           rPt--;
         }
         else
@@ -157,27 +158,57 @@ namespace pargeo::origKdTree
   }
 
   template <int _dim, class _objT>
+  void node<_dim, _objT>::initSerial()
+  {
+    par = NULL;
+	itemLeaf[0]=this;
+    if(!left && !right){
+      for(size_t i=1;i<size();i++)
+        itemLeaf[i]=this;
+    }else{
+      left->initSerial();
+      right->initSerial();
+      left->par = this;
+      right->par = this;
+    }
+  }
+
+  template <int _dim, class _objT>
+  void node<_dim, _objT>::initParallel()
+  {
+    par = NULL;
+	itemLeaf[0]=this;
+    if(!left && !right){
+      parlay::parallel_for(1, size(), [&](size_t i){
+        itemLeaf[i]=this;
+      });
+    }else{
+      parlay::par_do([&](){ left->initParallel(); }, [&](){ right->initParallel(); });
+      left->par = this;
+      right->par = this;
+    }
+  }
+
+  template <int _dim, class _objT>
   void node<_dim, _objT>::constructSerial(nodeT *space, intT leafSize)
   {
     boundingBoxSerial();
     sib = NULL;
+
+	for(intT i=1;i<size();i++){  // move the highest density/attribute to front, low attribute = high density
+		if(items[i]->attribute < items[0]->attribute)
+			std::swap(items[0], items[i]);
+	}
+	
     if (size() <= leafSize)
-    {
+    { // create another slice for the leaves each belongs to
       left = NULL;
       right = NULL;
     }
     else
     {
       intT k = findWidest();
-      // floatT xM = (pMax[k] + pMin[k]) / 2;
-      std::vector<floatT> kvalues(size());
-      for (std::size_t i=0; i< size(); ++i){
-        double val = items[i]->at(k); 
-        kvalues[i] = val;
-      }
-      std::nth_element(kvalues.begin(), kvalues.begin() + size()/2, kvalues.end());
-      floatT xM = kvalues[size()/2];
-      // std::cout << "k " << k << " xM " << xM << " max " << pMax[k] << " min " << pMin[k] << "\n";
+      floatT xM = (pMax[k] + pMin[k]) / 2;
 
       // Split items by xM (serial)
       intT median = splitItemSerial(xM);
@@ -187,13 +218,9 @@ namespace pargeo::origKdTree
         median = ceil(size() / 2.0);
       }
 
-      // if (!space[0].isEmpty() || !space[2*median-1].isEmpty()) {
-      //   throw std::runtime_error("Error, kdNode overwrite.");
-      // }
-
       // Recursive construction
-      space[0] = nodeT(items.cut(0, median), median, space + 1, leafSize);
-      space[2 * median - 1] = nodeT(items.cut(median, size()), size() - median, space + 2 * median, leafSize);
+      space[0] = nodeT(items.cut(1, median), itemLeaf.cut(1, median), median-1, space + 1, leafSize); // we will waste one additional space, but that's bearable
+      space[2 * median - 1] = nodeT(items.cut(median, size()), itemLeaf.cut(median, size()), size() - median, space + 2 * median, leafSize);
       left = space;
       right = space + 2 * median - 1;
       left->sib = right;
@@ -204,9 +231,19 @@ namespace pargeo::origKdTree
   template <int _dim, class _objT>
   void node<_dim, _objT>::constructParallel(nodeT *space, parlay::slice<bool *, bool *> flags, intT leafSize)
   {
-    boundingBoxParallel();
-
+	boundingBoxParallel();
     sib = NULL;
+
+	auto attComp = [](_objT* item1, _objT* item2){
+		return item1->attribute < item2->attribute;
+	};
+	auto ptrMax = parlay::min_element(items.cut(0,size()), attComp);
+
+	
+
+	if(items.begin() != ptrMax)
+		std::swap(items[0], *ptrMax);
+
     if (size() <= leafSize)
     {
       left = NULL;
@@ -215,15 +252,12 @@ namespace pargeo::origKdTree
     else
     {
       intT k = findWidest();
-      // floatT xM = (pMax[k] + pMin[k]) / 2;
-      parlay::sequence<floatT> kvalues =  parlay::tabulate(size(), [&] (std::size_t i) -> floatT {
-        return items[i]->at(k); 
-      });
-      floatT xM= parlay::kth_smallest_copy(kvalues, size()/2);
-      // std::cout << "k " << k << " xM " << xM << " max " << pMax[k] << " min " << pMin[k] << "\n";
+      floatT xM = (pMax[k] + pMin[k]) / 2;
 
       // Split items by xM in dim k (parallel)
-      parlay::parallel_for(0, size(),
+
+	  // todo: how to make sure heap element is not moved? look into split_two function
+      parlay::parallel_for(1, size(),
                            [&](intT i)
                            {
                              if (items[i]->at(k) < xM)
@@ -231,11 +265,11 @@ namespace pargeo::origKdTree
                              else
                                flags[i] = 0;
                            });
-      auto mySplit = kdTreeInternal::split_two(items, flags);
+      auto mySplit = kdTreeInternal::split_two(items.cut(1,size()), flags.cut(1,size()));
       auto splited = mySplit.first;
-      intT median = mySplit.second;
-      parlay::parallel_for(0, size(), [&](intT i)
-                           { items[i] = splited[i]; }); // Copy back
+      intT median = mySplit.second+1;
+      parlay::parallel_for(1, size(), [&](intT i)
+                           { items[i] = splited[i-1]; }); // Copy back
 
       if (median == 0 || median == size())
       {
@@ -247,11 +281,12 @@ namespace pargeo::origKdTree
       // }
 
       // Recursive construction
-      parlay::par_do([&]()
-                     { space[0] = nodeT(items.cut(0, median), median, space + 1, flags.cut(0, median), leafSize); },
+	  parlay::par_do([&]()
+                     { space[0] = nodeT(items.cut(1, median), itemLeaf.cut(1, median), median-1, space + 1, flags.cut(1, median), leafSize); },
                      [&]()
-                     { space[2 * median - 1] = nodeT(items.cut(median, size()), size() - median, space + 2 * median, flags.cut(median, size()), leafSize); });
-      left = space;
+                     { space[2 * median - 1] = nodeT(items.cut(median, size()), itemLeaf.cut(median, size()), size() - median, space + 2 * median, flags.cut(median, size()), leafSize); });
+	  
+	  left = space;
       right = space + 2 * median - 1;
       left->sib = right;
       right->sib = left;
@@ -262,11 +297,12 @@ namespace pargeo::origKdTree
   node<_dim, _objT>::node() {}
 
   template <int _dim, class _objT>
-  node<_dim, _objT>::node(parlay::slice<_objT **, _objT **> itemss,
+  node<_dim, _objT>::node(parlay::slice<_objT **, _objT **> items_,
+                          parlay::slice<nodeT **, nodeT **> itemLeaf_,
                           intT nn,
                           nodeT *space,
                           parlay::slice<bool *, bool *> flags,
-                          intT leafSize) : items(itemss)
+                          intT leafSize) : items(items_), itemLeaf(itemLeaf_)
   {
     resetId();
     if (size() > 2000)
@@ -276,10 +312,11 @@ namespace pargeo::origKdTree
   }
 
   template <int _dim, class _objT>
-  node<_dim, _objT>::node(parlay::slice<_objT **, _objT **> itemss,
+  node<_dim, _objT>::node(parlay::slice<_objT **, _objT **> items_,
+                          parlay::slice<nodeT **, nodeT **> itemLeaf_,
                           intT nn,
                           nodeT *space,
-                          intT leafSize) : items(itemss)
+                          intT leafSize) : items(items_), itemLeaf(itemLeaf_)
   {
     resetId();
     constructSerial(space, leafSize);
@@ -323,7 +360,7 @@ namespace pargeo::origKdTree
   }
 
   template <int dim, class objT>
-  node<dim, objT> *build(parlay::slice<objT *, objT *> P,
+  tree<dim, objT> *build(parlay::slice<objT *, objT *> P,
                          bool parallel,
                          size_t leafSize)
   {
@@ -343,7 +380,7 @@ namespace pargeo::origKdTree
   }
 
   template <int dim, class objT>
-  node<dim, objT> *build(parlay::sequence<objT> &P,
+  tree<dim, objT> *build(parlay::sequence<objT> &P,
                          bool parallel,
                          size_t leafSize)
   {

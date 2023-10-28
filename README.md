@@ -10,3 +10,10 @@ Need to change the dimension in `parameter.h` before compilation.
 
 
 ./src/dpc_sddp -i ../data/gaussian_example/gaussian_4_1000.data
+
+./src/dpc_sddp -i ../data/mnist/mnist.txt
+
+
+TODO:
+- make pskdtree split at median
+- add option to tree: use spatial or object median split
