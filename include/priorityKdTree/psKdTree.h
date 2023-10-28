@@ -203,7 +203,7 @@ namespace pargeo::psKdTree
         _pMin[i] = std::min(_pMin[i], p[i]);
     }
 
-    inline void maxCoords(pointT &_pMax, pointT &p)
+    inline void maxCoords(pointT &_pMax, const pointT &p)
     {
       for (int i = 0; i < dim; ++i)
         _pMax[i] = std::max(_pMax[i], p[i]);
@@ -215,7 +215,7 @@ namespace pargeo::psKdTree
 
     intT splitItemSerial(floatT xM);
 
-    inline bool itemInBox(pointT pMin1, pointT pMax1, _objT *item)
+    inline bool itemInBox(const pointT& pMin1, const pointT& pMax1, _objT *item)
     {
       for (int i = 0; i < _dim; ++i)
       {
@@ -338,7 +338,7 @@ namespace pargeo::psKdTree
       return myMax;
     }
 
-	inline double distSqrClosestToCenter(pointT center, pointT pMin, pointT pMax) {
+	inline double distSqrClosestToCenter(const pointT& center, const pointT& pMin, const pointT& pMax) {
 	  double dist = 0;
       for (int d = 0; d < dim; ++ d) {
 		  double delta = std::max(pMin[d], std::min(center[d], pMax[d])) - center[d];
@@ -347,7 +347,7 @@ namespace pargeo::psKdTree
       return dist;
     }
 
-	inline pointT pointClosestToCenter(pointT center, pointT pMin, pointT pMax) {
+	inline pointT pointClosestToCenter(const pointT& center, const pointT& pMin, const pointT& pMax) {
       pointT p;
       for (int d = 0; d < dim; ++ d) {
 		  p[d] = std::max(pMin[d], std::min(center[d], pMax[d]));
@@ -355,7 +355,7 @@ namespace pargeo::psKdTree
       return p;
     }
 
-    inline pointT pointFarthestFromCenter(pointT center, pointT pMin, pointT pMax){
+    inline pointT pointFarthestFromCenter(const pointT& center, const pointT& pMin, const pointT& pMax){
 		pointT p;
 		for (int d = 0; d < dim; ++ d){
 			p[d] = (center[d]*2 < pMin[d]+pMax[d]) ? pMax[d] : pMin[d]; 
@@ -363,7 +363,7 @@ namespace pargeo::psKdTree
 		return p;
 	}
 
-    inline int boxBallCompare(pointT center, double r, pointT pMin, pointT pMax) {
+    inline int boxBallCompare(const pointT& center, double r, const pointT& pMin, const pointT& pMax) {
       pointT pc = pointClosestToCenter(center, pMin, pMax);
       double pcToCenter = pc.distSqr(center); //squared distance
       if(pcToCenter <= r*r) {
@@ -379,7 +379,7 @@ namespace pargeo::psKdTree
 	  }
     }
 
-    inline int boxCompare(pointT pMin1, pointT pMax1, pointT pMin2, pointT pMax2)
+    inline int boxCompare(const pointT& pMin1, const pointT& pMax1, const pointT& pMin2, const pointT& pMax2)
     {
       bool exclude = false;
       bool include = true; //1 include 2

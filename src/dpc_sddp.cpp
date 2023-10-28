@@ -80,7 +80,7 @@ template <int dim>
 parlay::sequence<pargeo::pointD<dim, double>> read_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K){
   using pointF = pargeo::pointD<dim, double>;
   parlay::sequence<pointF> ptrDs(ptrs.size());
-  std::ifstream inFile("/afs/csail.mit.edu/u/s/shangdiy/DPC-ANN/ParDPC/build/densities.txt");
+  std::ifstream inFile("/home/sy/ParDPC/build/densities.txt");
     if (!inFile) {
         std::cerr << "Error opening file for reading!" << std::endl;
         exit(1);
@@ -127,7 +127,7 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
       }
     }
   });
-  parlay::sequence<pointF> ptrDs = compute_densities<dim>(ptrs, K);
+  parlay::sequence<pointF> ptrDs = read_densities<dim>(ptrs, K);
   output_metadata["Compute density time"] = densityT.get_next();
   std::cout << "density: " << output_metadata["Compute density time"] << std::endl;
 
@@ -153,8 +153,7 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
   parlay::parallel_for(
       0, n,
       [&](size_t i) {
-        if (i!= 56737) return;
-        std::cout << "i " << i << std::endl;
+        // std::cout << "i " << i << std::endl;
         pointF *ptr = root->NearestNeighborBounded(i);
         if (ptr)
           depPtr[inverseMap[i]] = inverseMap[ptr->attribute];

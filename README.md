@@ -17,3 +17,4 @@ Need to change the dimension in `parameter.h` before compilation.
 TODO:
 - make pskdtree split at median
 - add option to tree: use spatial or object median split
+- change read density back to compute density

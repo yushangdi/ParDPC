@@ -208,15 +208,15 @@ namespace pargeo::origKdTree
 
     nodeT *sib;
 
-    parlay::slice<_objT **, _objT **> items = parlay::slice<_objT **, _objT **>(nullptr, nullptr);
+    parlay::slice<_objT **, _objT **> items;
 
-    inline void minCoords(pointT &_pMin, pointT &p)
+    inline void minCoords(pointT &_pMin, const pointT &p)
     {
       for (int i = 0; i < dim; ++i)
         _pMin[i] = std::min(_pMin[i], p[i]);
     }
 
-    inline void maxCoords(pointT &_pMax, pointT &p)
+    inline void maxCoords(pointT &_pMax, const pointT &p)
     {
       for (int i = 0; i < dim; ++i)
         _pMax[i] = std::max(_pMax[i], p[i]);
@@ -228,7 +228,7 @@ namespace pargeo::origKdTree
 
     intT splitItemSerial(floatT xM);
 
-    inline bool itemInBox(pointT pMin1, pointT pMax1, _objT *item)
+    inline bool itemInBox(const pointT& pMin1, const pointT& pMax1, const _objT *item)
     {
       for (int i = 0; i < _dim; ++i)
       {
@@ -266,11 +266,8 @@ namespace pargeo::origKdTree
     inline nodeT *R() { return right; }
 
     inline nodeT *siblin() { return sib; }
-    
-    inline intT size() { 
-      if (items.begin() == nullptr) return 0;
-      return items.size(); 
-      }
+
+    inline intT size() { return items.size(); }
 
     inline _objT *operator[](intT i) { return items[i]; }
 
@@ -343,7 +340,7 @@ namespace pargeo::origKdTree
       return myMax;
     }
 
-    inline int boxCompare(pointT pMin1, pointT pMax1, pointT pMin2, pointT pMax2)
+    inline int boxCompare(const pointT& pMin1, const pointT& pMax1, const pointT& pMin2, const pointT& pMax2)
     {
       bool exclude = false;
       bool include = true; //1 include 2
