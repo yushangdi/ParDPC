@@ -35,7 +35,7 @@ int tree_depth(Node *tree){
 
 template <int dim>
 parlay::sequence<pargeo::pointD<dim, double>>
-compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K) {
+compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K, bool spatial_median) {
   using point = pargeo::point<dim>;
   using ball = pargeo::_ball<dim, point>;
   using pointF = pargeo::pointD<dim, double>;
@@ -44,9 +44,10 @@ compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K) {
     leaf_size = 100;
   }
   std::cout << "knn tree building, leaf size = " << leaf_size << std::endl;
+  std::cout << "use " << (spatial_median? "spatial median" : "object median") << " split\n";
 
   pargeo::origKdTree::node<dim, point> *tree =
-      pargeo::origKdTree::build<dim, point>(ptrs, true, leaf_size);
+      pargeo::origKdTree::build<dim, point>(ptrs, true, leaf_size, spatial_median);
   
   std::cout << "knn tree built, leaf size = " << leaf_size << std::endl;
   std::cout << "tree depth " << tree_depth(tree) << std::endl;
@@ -104,7 +105,7 @@ parlay::sequence<pargeo::pointD<dim, double>> read_densities(parlay::sequence<pa
 template <int dim>
 ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
                           std::size_t n, double K, double noiseCut,
-                          double depCut) {
+                          double depCut, bool spatial_median) {
   using point = pargeo::point<dim>;
   using ball = pargeo::_ball<dim, point>;
   using pointF = pargeo::pointD<dim, double>;
@@ -127,7 +128,7 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
       }
     }
   });
-  parlay::sequence<pointF> ptrDs = read_densities<dim>(ptrs, K);
+  parlay::sequence<pointF> ptrDs = compute_densities<dim>(ptrs, K, spatial_median);
   output_metadata["Compute density time"] = densityT.get_next();
   std::cout << "density: " << output_metadata["Compute density time"] << std::endl;
 
@@ -207,13 +208,13 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
 
 template DPC::ClusteringResult DPC::dpc_sddp<2>(double *, std::string,
                                                 std::string, std::size_t,
-                                                double, double, double);
+                                                double, double, double, bool);
 template DPC::ClusteringResult DPC::dpc_sddp<128>(double *, std::string,
                                                   std::string, std::size_t,
-                                                  double, double, double);
+                                                  double, double, double, bool);
 template DPC::ClusteringResult DPC::dpc_sddp<784>(double *, std::string,
                                                   std::string, std::size_t,
-                                                  double, double, double);
+                                                  double, double, double, bool);
 template DPC::ClusteringResult DPC::dpc_sddp<1024>(double *, std::string,
                                                   std::string, std::size_t,
-                                                  double, double, double);
+                                                  double, double, double, bool);

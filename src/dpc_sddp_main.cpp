@@ -19,6 +19,7 @@ int main(int argc, char *argv[]) {
   char *iFile = P.getOptionValue("-i");
   std::string oFile = P.getOptionValue("-o", std::string(""));
   std::string dFile = P.getOptionValue("-decision", std::string(""));
+  bool spatial_median = !P.getOption("-objmedian");
 
   double *data;
   std::size_t n;
@@ -26,13 +27,13 @@ int main(int argc, char *argv[]) {
   DPC::load_text_file(iFile, data, n, dim);
 
   if (dim == 2) {
-    DPC::dpc_sddp<2>(data, oFile, dFile, n, K, noiseCut, depCut);
+    DPC::dpc_sddp<2>(data, oFile, dFile, n, K, noiseCut, depCut, spatial_median);
   } else if (dim == 128) {
-    DPC::dpc_sddp<128>(data, oFile, dFile, n, K, noiseCut, depCut);
+    DPC::dpc_sddp<128>(data, oFile, dFile, n, K, noiseCut, depCut, spatial_median);
   } else if (dim == 784) {
-    DPC::dpc_sddp<784>(data, oFile, dFile, n, K, noiseCut, depCut);
+    DPC::dpc_sddp<784>(data, oFile, dFile, n, K, noiseCut, depCut, spatial_median);
   } else if (dim == 1024) {
-    DPC::dpc_sddp<1024>(data, oFile, dFile, n, K, noiseCut, depCut);
+    DPC::dpc_sddp<1024>(data, oFile, dFile, n, K, noiseCut, depCut, spatial_median);
   } else {
     std::cout << "Unsupported dimension, dim = "<< dim << "\n";
     exit(1);

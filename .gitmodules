@@ -1,6 +1,7 @@
 [submodule "external/ParGeo"]
-	path = external/ParGeo
-	url = https://github.com/michaelyhuang23/ParGeo.git
+    path = external/ParGeo
+    url = git@github.com:yushangdi/ParGeo.git
+    branch = priority_tree
 [submodule "external/parlaylib"]
 	path = external/parlaylib
 	url = https://github.com/cmuparlay/parlaylib.git

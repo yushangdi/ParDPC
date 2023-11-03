@@ -157,7 +157,7 @@ namespace pargeo::origKdTree
   }
 
   template <int _dim, class _objT>
-  void node<_dim, _objT>::constructSerial(nodeT *space, intT leafSize)
+  void node<_dim, _objT>::constructSerial(nodeT *space, intT leafSize, bool spatial_median)
   {
     boundingBoxSerial();
     sib = NULL;
@@ -169,14 +169,19 @@ namespace pargeo::origKdTree
     else
     {
       intT k = findWidest();
-      // floatT xM = (pMax[k] + pMin[k]) / 2;
-      std::vector<floatT> kvalues(size());
-      for (std::size_t i=0; i< size(); ++i){
-        double val = items[i]->at(k); 
-        kvalues[i] = val;
+      floatT xM;
+      if (spatial_median){
+        xM = (pMax[k] + pMin[k]) / 2;
+      } else { // use object median
+        std::vector<floatT> kvalues(size());
+        for (std::size_t i=0; i< size(); ++i){
+          double val = items[i]->at(k); 
+          kvalues[i] = val;
+        }
+        std::nth_element(kvalues.begin(), kvalues.begin() + size()/2, kvalues.end());
+        xM = kvalues[size()/2];
       }
-      std::nth_element(kvalues.begin(), kvalues.begin() + size()/2, kvalues.end());
-      floatT xM = kvalues[size()/2];
+      // floatT xM = (pMax[k] + pMin[k]) / 2;
       // std::cout << "k " << k << " xM " << xM << " max " << pMax[k] << " min " << pMin[k] << "\n";
 
       // Split items by xM (serial)
@@ -192,8 +197,8 @@ namespace pargeo::origKdTree
       // }
 
       // Recursive construction
-      space[0] = nodeT(items.cut(0, median), median, space + 1, leafSize);
-      space[2 * median - 1] = nodeT(items.cut(median, size()), size() - median, space + 2 * median, leafSize);
+      space[0] = nodeT(items.cut(0, median), median, space + 1, leafSize, spatial_median);
+      space[2 * median - 1] = nodeT(items.cut(median, size()), size() - median, space + 2 * median, leafSize, spatial_median);
       left = space;
       right = space + 2 * median - 1;
       left->sib = right;
@@ -202,7 +207,7 @@ namespace pargeo::origKdTree
   }
 
   template <int _dim, class _objT>
-  void node<_dim, _objT>::constructParallel(nodeT *space, parlay::slice<bool *, bool *> flags, intT leafSize)
+  void node<_dim, _objT>::constructParallel(nodeT *space, parlay::slice<bool *, bool *> flags, intT leafSize, bool spatial_median)
   {
     boundingBoxParallel();
 
@@ -216,10 +221,15 @@ namespace pargeo::origKdTree
     {
       intT k = findWidest();
       // floatT xM = (pMax[k] + pMin[k]) / 2;
-      parlay::sequence<floatT> kvalues =  parlay::tabulate(size(), [&] (std::size_t i) -> floatT {
-        return items[i]->at(k); 
-      });
-      floatT xM= parlay::kth_smallest_copy(kvalues, size()/2);
+      floatT xM;
+      if (spatial_median){
+        xM = (pMax[k] + pMin[k]) / 2;
+      } else { // use object median
+        parlay::sequence<floatT> kvalues =  parlay::tabulate(size(), [&] (std::size_t i) -> floatT {
+          return items[i]->at(k); 
+        });
+        xM= parlay::kth_smallest_copy(kvalues, size()/2);
+      }
       // std::cout << "k " << k << " xM " << xM << " max " << pMax[k] << " min " << pMin[k] << "\n";
 
       // Split items by xM in dim k (parallel)
@@ -248,9 +258,9 @@ namespace pargeo::origKdTree
 
       // Recursive construction
       parlay::par_do([&]()
-                     { space[0] = nodeT(items.cut(0, median), median, space + 1, flags.cut(0, median), leafSize); },
+                     { space[0] = nodeT(items.cut(0, median), median, space + 1, flags.cut(0, median), leafSize, spatial_median); },
                      [&]()
-                     { space[2 * median - 1] = nodeT(items.cut(median, size()), size() - median, space + 2 * median, flags.cut(median, size()), leafSize); });
+                     { space[2 * median - 1] = nodeT(items.cut(median, size()), size() - median, space + 2 * median, flags.cut(median, size()), leafSize, spatial_median); });
       left = space;
       right = space + 2 * median - 1;
       left->sib = right;
@@ -266,23 +276,23 @@ namespace pargeo::origKdTree
                           intT nn,
                           nodeT *space,
                           parlay::slice<bool *, bool *> flags,
-                          intT leafSize) : items(itemss)
+                          intT leafSize, bool spatial_median) : items(itemss)
   {
     resetId();
     if (size() > 2000)
-      constructParallel(space, flags, leafSize);
+      constructParallel(space, flags, leafSize, spatial_median);
     else
-      constructSerial(space, leafSize);
+      constructSerial(space, leafSize, spatial_median);
   }
 
   template <int _dim, class _objT>
   node<_dim, _objT>::node(parlay::slice<_objT **, _objT **> itemss,
                           intT nn,
                           nodeT *space,
-                          intT leafSize) : items(itemss)
+                          intT leafSize, bool spatial_median) : items(itemss)
   {
     resetId();
-    constructSerial(space, leafSize);
+    constructSerial(space, leafSize, spatial_median);
   }
 
   template <typename nodeT>
@@ -325,7 +335,7 @@ namespace pargeo::origKdTree
   template <int dim, class objT>
   node<dim, objT> *build(parlay::slice<objT *, objT *> P,
                          bool parallel,
-                         size_t leafSize)
+                         size_t leafSize, bool spatial_median)
   {
     typedef tree<dim, objT> treeT;
     typedef node<dim, objT> nodeT;
@@ -334,20 +344,20 @@ namespace pargeo::origKdTree
     {
       auto flags = parlay::sequence<bool>(P.size());
       auto flagSlice = parlay::slice(flags.begin(), flags.end());
-      return new treeT(P, flagSlice, leafSize);
+      return new treeT(P, flagSlice, leafSize, spatial_median);
     }
     else
     {
-      return new treeT(P, leafSize);
+      return new treeT(P, leafSize, spatial_median);
     }
   }
 
   template <int dim, class objT>
   node<dim, objT> *build(parlay::sequence<objT> &P,
                          bool parallel,
-                         size_t leafSize)
+                         size_t leafSize, bool spatial_median)
   {
-    return build<dim, objT>(parlay::make_slice(P), parallel, leafSize);
+    return build<dim, objT>(parlay::make_slice(P), parallel, leafSize, spatial_median);
   }
 
   template <int dim, class objT>
