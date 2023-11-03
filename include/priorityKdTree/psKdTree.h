@@ -52,7 +52,7 @@ namespace pargeo::psKdTree
 
   public:
     tree(parlay::slice<_objT *, _objT *> _items,
-         typename baseT::intT leafSize = 16)
+         typename baseT::intT leafSize = 16, bool spatial_median = true)
     {
 
       typedef tree<_dim, _objT> treeT;
@@ -78,7 +78,7 @@ namespace pargeo::psKdTree
       baseT::itemLeaf = allItemLeaf->cut(0, allItemLeaf->size());
 
       baseT::resetId();
-      baseT::constructSerial(space, leafSize);
+      baseT::constructSerial(space, leafSize, spatial_median);
 
       for (size_t i=0; i < _items.size(); ++i)
         id2loc->at(allItems->at(i)->attribute) = i;
@@ -86,7 +86,7 @@ namespace pargeo::psKdTree
 
     tree(parlay::slice<_objT *, _objT *> _items,
          parlay::slice<bool *, bool *> flags,
-         typename baseT::intT leafSize = 16)
+         typename baseT::intT leafSize = 16, bool spatial_median = true)
     {
 
       typedef tree<_dim, _objT> treeT;
@@ -113,9 +113,9 @@ namespace pargeo::psKdTree
 
       baseT::resetId();
       if (baseT::size() > 2000)
-        baseT::constructParallel(space, flags, leafSize);
+        baseT::constructParallel(space, flags, leafSize, spatial_median);
       else
-        baseT::constructSerial(space, leafSize);
+        baseT::constructSerial(space, leafSize, spatial_median);
 
       parlay::parallel_for(0, _items.size(), [&](size_t i){
         id2loc->at(allItems->at(i)->attribute) = i;
@@ -154,12 +154,12 @@ namespace pargeo::psKdTree
   template <int dim, class objT>
   tree<dim, objT> *build(parlay::slice<objT *, objT *> P,
                          bool parallel = true,
-                         size_t leafSize = 16);
+                         size_t leafSize = 16, bool spatial_median = true);
 
   template <int dim, class objT>
   tree<dim, objT> *build(parlay::sequence<objT> &P,
                          bool parallel = true,
-                         size_t leafSize = 16);
+                         size_t leafSize = 16, bool spatial_median = true);
 
   template <int dim, class objT>
   void del(node<dim, objT> *tree);
@@ -239,9 +239,9 @@ namespace pargeo::psKdTree
       return k;
     }
 
-    void constructSerial(nodeT *space, intT leafSize);
+    void constructSerial(nodeT *space, intT leafSize, bool spatial_median);
 
-    void constructParallel(nodeT *space, parlay::slice<bool *, bool *> flags, intT leafSize);
+    void constructParallel(nodeT *space, parlay::slice<bool *, bool *> flags, intT leafSize, bool spatial_median);
 
   public:
     using objT = _objT;
@@ -405,13 +405,13 @@ namespace pargeo::psKdTree
          intT nn,
          nodeT *space,
          parlay::slice<bool *, bool *> flags,
-         intT leafSize = 16);
+         intT leafSize = 16, bool spatial_median = true);
 
     node(parlay::slice<_objT **, _objT **> items_,
          parlay::slice<nodeT **, nodeT **> itemLeaf_,
          intT nn,
          nodeT *space,
-         intT leafSize = 16);
+         intT leafSize = 16, bool spatial_median = true);
 
     virtual ~node()
     {

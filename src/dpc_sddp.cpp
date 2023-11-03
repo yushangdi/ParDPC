@@ -44,7 +44,6 @@ compute_densities(parlay::sequence<pargeo::point<dim>> &ptrs, int K, bool spatia
     leaf_size = 100;
   }
   std::cout << "knn tree building, leaf size = " << leaf_size << std::endl;
-  std::cout << "use " << (spatial_median? "spatial median" : "object median") << " split\n";
 
   pargeo::origKdTree::node<dim, point> *tree =
       pargeo::origKdTree::build<dim, point>(ptrs, true, leaf_size, spatial_median);
@@ -105,7 +104,7 @@ parlay::sequence<pargeo::pointD<dim, double>> read_densities(parlay::sequence<pa
 template <int dim>
 ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
                           std::size_t n, double K, double noiseCut,
-                          double depCut, bool spatial_median) {
+                          double depCut, bool spatial_median, bool randomize) {
   using point = pargeo::point<dim>;
   using ball = pargeo::_ball<dim, point>;
   using pointF = pargeo::pointD<dim, double>;
@@ -119,15 +118,17 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
   parlay::sequence<point> ptrs = parlay::tabulate(
       n, [&](size_t i) -> point { return point(data + dim * i); });
   // add random noise
-  std::default_random_engine generator;
-  std::uniform_real_distribution<double> distribution(0.0, 0.00001);
-  parlay::parallel_for(0, n, [&](std::size_t i){
-    for (int d = 0; d < dim ; ++ d){
-      if(ptrs[i][d] == 0){
-        ptrs[i][d] +=  distribution(generator);
+  if (randomize){
+    std::default_random_engine generator;
+    std::uniform_real_distribution<double> distribution(0.0, 0.00001);
+    parlay::parallel_for(0, n, [&](std::size_t i){
+      for (int d = 0; d < dim ; ++ d){
+        if(ptrs[i][d] == 0){
+          ptrs[i][d] +=  distribution(generator);
+        }
       }
-    }
-  });
+    });
+  }
   parlay::sequence<pointF> ptrDs = compute_densities<dim>(ptrs, K, spatial_median);
   output_metadata["Compute density time"] = densityT.get_next();
   std::cout << "density: " << output_metadata["Compute density time"] << std::endl;
@@ -147,7 +148,7 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
     leaf_size = 100;
   }
   pargeo::psKdTree::tree<dim, pointF> *root =
-      pargeo::psKdTree::build<dim, pointF>(ptrDs, true, leaf_size);
+      pargeo::psKdTree::build<dim, pointF>(ptrDs, true, leaf_size, spatial_median);
   std::cout << "psKd-tree built, leaf size = " << leaf_size << std::endl;
   std::cout << "tree depth " << tree_depth(root) << std::endl;
   root->pargeo::psKdTree::node<dim, pointF>::initParallel();
@@ -208,13 +209,17 @@ ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
 
 template DPC::ClusteringResult DPC::dpc_sddp<2>(double *, std::string,
                                                 std::string, std::size_t,
-                                                double, double, double, bool);
+                                                double, double, double, 
+                                                bool, bool);
 template DPC::ClusteringResult DPC::dpc_sddp<128>(double *, std::string,
                                                   std::string, std::size_t,
-                                                  double, double, double, bool);
+                                                  double, double, double, 
+                                                  bool, bool);
 template DPC::ClusteringResult DPC::dpc_sddp<784>(double *, std::string,
                                                   std::string, std::size_t,
-                                                  double, double, double, bool);
+                                                  double, double, double, 
+                                                  bool, bool);
 template DPC::ClusteringResult DPC::dpc_sddp<1024>(double *, std::string,
                                                   std::string, std::size_t,
-                                                  double, double, double, bool);
+                                                  double, double, double, 
+                                                  bool, bool);

@@ -7,5 +7,6 @@ namespace DPC {
 template <int dim>
 ClusteringResult dpc_sddp(double *data, std::string oFile, std::string dFile,
                           std::size_t n, double K, double noiseCut,
-                          double depCut, bool spatial_median = true);
+                          double depCut, bool spatial_median = true, 
+                          bool randomize = false);
 } // namespace DPC
